@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#C9A3A8">
+<title>スマホとPCで共有</title>
+<link rel="manifest" href="manifest.json">
+<style>
+:root{--rose:#C9A3A8;--sage:#9DAE98;--bg:#F6F2EE;--card:#fff;--ink:#4A4043;--mute:#8C8084;--fs:16px}
+body.large{--fs:20px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:var(--fs)/1.5 system-ui,"Noto Sans JP",sans-serif}
+header{background:var(--rose);color:#fff;padding:12px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+header h1{font-size:1.15em;margin:0;flex:1}
+.chip{border:0;border-radius:16px;padding:6px 12px;background:#fff6;color:#fff;font:inherit;font-size:.85em;cursor:pointer}
+.chip.on{background:var(--sage)}
+main{max-width:760px;margin:0 auto;padding:14px}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px #0001}
+textarea{width:100%;min-height:90px;border:1px solid #e3d9d7;border-radius:12px;padding:10px;font:inherit;color:inherit}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+button.b{border:0;border-radius:12px;padding:10px 14px;font:inherit;cursor:pointer;background:var(--sage);color:#fff}
+button.b.alt{background:var(--rose)}button.b.ghost{background:#efe7e3;color:var(--ink)}
+.item{border-top:1px solid #f0e8e6;padding:10px 0;display:flex;gap:10px;align-items:flex-start}
+.item:first-child{border-top:0}
+.tag{font-size:.75em;border-radius:8px;padding:2px 8px;color:#fff;white-space:nowrap}
+.tag.pc{background:var(--rose)}.tag.phone{background:var(--sage)}
+.txt{flex:1;white-space:pre-wrap;word-break:break-word}
+.small{font-size:.85em;color:var(--mute)}
+#qrbox{display:flex;gap:16px;align-items:center;flex-wrap:wrap}#qrbox img{width:200px;height:200px;border-radius:12px;background:#fff}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 16px;border-radius:20px;opacity:0;transition:.3s}
+#toast.show{opacity:.92}
+.drop{border:2px dashed var(--rose);border-radius:12px;padding:14px;text-align:center;color:var(--mute)}
+.hide{display:none}
+</style></head>
+<body>
+<header><h1 data-t="title"></h1>
+<button class="chip" id="lang"></button><button class="chip" id="big"></button></header>
+<main>
+<section class="card hide" id="pair"><h2 data-t="pairH" style="margin-top:0;font-size:1.1em"></h2>
+<div id="qrbox"><img id="qr" alt="QR"><div><p data-t="pairP"></p><p class="small" id="purl"></p><p class="small" id="where"></p></div></div></section>
+<section class="card hide" id="nokey"><p data-t="nokey"></p></section>
+<section class="card" id="send">
+<textarea id="t" data-ph="ph"></textarea>
+<div class="row"><button class="b" id="sendT" data-t="send"></button>
+<button class="b alt hide" id="sendClip" data-t="sendClip"></button>
+<button class="b ghost" id="pasteBtn" data-t="paste"></button></div>
+<div class="row"><label class="drop" style="flex:1"><input type="file" id="f" multiple hidden><span data-t="files"></span></label></div>
+</section>
+<section class="card"><h2 data-t="hist" style="margin-top:0;font-size:1.1em"></h2><div id="list"><p class="small" data-t="empty"></p></div></section>
+</main><div id="toast"></div>
+<script>
+const T={ja:{title:"スマホとPCで共有",pairH:"スマホをつなぐ",pairP:"同じWi-Fiのスマホのカメラで、このQRコードを読み取ってください。",
+send:"送る",sendClip:"PCのクリップボードを送る",paste:"貼り付け",files:"📎 ファイルを選んで送る（ここに置いてもOK）",hist:"やりとり",empty:"まだ何もありません",
+ph:"ここに文字を入れて「送る」",copy:"コピー",copyPC:"PCにコピー",dl:"保存",sent:"送りました",copied:"コピーしました",fromPC:"PC",fromPhone:"スマホ",
+nokey:"PCに表示されたQRコードを読み取って開いてください。",saved:"PCの保存先: ",err:"うまくいきませんでした",auto:"スマホからの文字は自動でPCのクリップボードに入ります。",openF:"フォルダを開く"},
+en:{title:"Phone PC Share",pairH:"Connect your phone",pairP:"On the same Wi-Fi, scan this QR code with your phone's camera.",
+send:"Send",sendClip:"Send PC clipboard",paste:"Paste",files:"📎 Choose files to send (or drop them here)",hist:"History",empty:"Nothing yet",
+ph:"Type here, then Send",copy:"Copy",copyPC:"Copy on PC",dl:"Save",sent:"Sent",copied:"Copied",fromPC:"PC",fromPhone:"Phone",
+nokey:"Open this page by scanning the QR code shown on your PC.",saved:"Saved on PC in: ",err:"Something went wrong",auto:"Text from the phone goes straight onto the PC clipboard.",openF:"Open folder"}};
+let L=localStorage.lang||"ja",big=localStorage.big==="1",role="phone",last=0,all=[];
+const q=new URLSearchParams(location.search);if(q.get("k")){localStorage.key=q.get("k");history.replaceState(null,"",location.pathname+(q.get("as")?"?as="+q.get("as"):""))}
+const KEY=localStorage.key||"",AS=q.get("as")?"&as="+q.get("as"):"";
+const $=s=>document.querySelector(s),t=k=>T[L][k];
+function api(p,o={}){o.headers=Object.assign({"X-Key":KEY},o.headers||{});return fetch(p+(p.includes("?")?"&":"?")+"k="+KEY+AS,o).then(r=>{if(!r.ok)throw r;return r})}
+function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("show");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("show"),1600)}
+function paint(){document.documentElement.lang=L;document.title=t("title");document.querySelectorAll("[data-t]").forEach(e=>e.textContent=t(e.dataset.t));
+$("#t").placeholder=t("ph");$("#lang").textContent=L==="ja"?"English":"日本語";$("#big").textContent=L==="ja"?"大きい文字":"Large text";
+$("#big").classList.toggle("on",big);document.body.classList.toggle("large",big);render()}
+$("#lang").onclick=()=>{L=L==="ja"?"en":"ja";localStorage.lang=L;paint()};
+$("#big").onclick=()=>{big=!big;localStorage.big=big?"1":"0";paint()};
+function size(n){return n>1e6?(n/1e6).toFixed(1)+" MB":Math.max(1,Math.round(n/1e3))+" KB"}
+function copyLocal(s){if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(s);
+const a=document.createElement("textarea");a.value=s;a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();document.execCommand("copy");a.remove();return Promise.resolve()}
+function render(){const l=$("#list");if(!all.length){l.innerHTML=`<p class="small">${t("empty")}</p>`;return}l.innerHTML="";
+[...all].reverse().forEach(it=>{const d=document.createElement("div");d.className="item";
+const tag=`<span class="tag ${it.from}">${it.from==="pc"?t("fromPC"):t("fromPhone")}</span>`;
+if(it.kind==="text"){d.innerHTML=tag+`<div class="txt"></div><button class="b ghost c1">${t("copy")}</button>`;d.querySelector(".txt").textContent=it.text;
+d.querySelector(".c1").onclick=()=>copyLocal(it.text).then(()=>toast(t("copied")));
+if(role==="phone"){} }
+else{d.innerHTML=tag+`<div class="txt"></div><a class="b ghost" style="text-decoration:none;padding:10px 14px;border-radius:12px;background:#efe7e3;color:inherit" href="api/dl?id=${it.id}&k=${KEY}${AS}">${t("dl")}</a>`;
+d.querySelector(".txt").textContent="📄 "+it.name+"  ("+size(it.size)+")"}
+l.appendChild(d)})}
+async function poll(){try{const r=await api("api/items?since="+last);const n=await r.json();if(n.length){
+n.forEach(it=>{all.push(it);last=Math.max(last,it.id)});if(all.length>200)all=all.slice(-200);render()}}catch(e){}setTimeout(poll,1500)}
+$("#sendT").onclick=async()=>{const s=$("#t").value;if(!s.trim())return;try{await api("api/text",{method:"POST",body:JSON.stringify({text:s})});$("#t").value="";toast(t("sent"))}catch(e){toast(t("err"))}};
+$("#sendClip").onclick=async()=>{try{await api("api/pc-clipboard",{method:"POST"});toast(t("sent"))}catch(e){toast(t("err"))}};
+$("#pasteBtn").onclick=async()=>{try{$("#t").value=await navigator.clipboard.readText()}catch(e){$("#t").focus();toast(L==="ja"?"長押しして「貼り付け」してください":"Long-press the box and choose Paste")}};
+async function upload(files){if(!files.length)return;const fd=new FormData();[...files].forEach(f=>fd.append("f",f,f.name));
+try{await api("api/file",{method:"POST",body:fd});toast(t("sent"))}catch(e){toast(t("err"))}}
+$("#f").onchange=e=>{upload(e.target.files);e.target.value=""};
+document.addEventListener("dragover",e=>e.preventDefault());document.addEventListener("drop",e=>{e.preventDefault();upload(e.dataTransfer.files)});
+(async()=>{paint();try{const i=await (await api("api/info")).json();role=i.role;
+if(role==="pc"){$("#pair").classList.remove("hide");$("#sendClip").classList.remove("hide");$("#qr").src="api/qr.png?x="+Date.now();$("#purl").textContent=i.url;
+$("#where").textContent=t("saved")+i.saveDir+" — "+t("auto")}poll()}catch(e){$("#nokey").classList.remove("hide");$("#send").classList.add("hide")}})();
+</script></body></html>
