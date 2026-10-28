@@ -175,9 +175,14 @@ func main() {
 
 	sub := http.FileServer(http.FS(webFS))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			r.URL.Path = "/web/index.html"
-		} else if !strings.HasPrefix(r.URL.Path, "/web/") {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			b, _ := webFS.ReadFile("web/index.html")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			w.Write(b)
+			return
+		}
+		if !strings.HasPrefix(r.URL.Path, "/web/") {
 			r.URL.Path = "/web" + r.URL.Path
 		}
 		sub.ServeHTTP(w, r)
